@@ -23,6 +23,7 @@ class Employee(Base):
     yrs_of_experience = Column(Integer, nullable=False)
     role_id = Column(Integer, ForeignKey('roles.id'))
     date_of_joining = Column(DateTime, nullable=False, default=datetime.utcnow)
+    last_login = Column(DateTime, nullable=False, default=datetime.utcnow)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(String(50))

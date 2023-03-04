@@ -46,3 +46,34 @@ class Employee(BaseModel):
         if not re.fullmatch(regex, v):
             raise ValueError("email is invalid")
         return v.lower()
+
+
+class LoginUser(BaseModel):
+    email: str
+    password: str
+
+
+class EmployeeUser(LoginUser):
+    @validator("email")
+    def validate_email(cls, v):
+        if not re.fullmatch(regex, v):
+            raise ValueError("email is invalid")
+        return v.lower()
+
+    @validator("password")
+    def validate_last_name(cls, v):
+        if v is not None and len(v) < 8:
+            raise ValueError("Last name must be at least 3 characters long")
+        if v is not None and len(v) > 30:
+            raise ValueError("Last name must be at most 30 characters long")
+        return v
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
+class TokenData(BaseModel):
+    email: str
+    role: str

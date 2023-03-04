@@ -1,12 +1,15 @@
 import csv
-from fastapi import FastAPI, Depends, UploadFile, File, HTTPException
+from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 import schemas
+from security import JWTtoken
 from database import Base, engine, get_db
 import models
 import uvicorn
 import codecs
+from fastapi.security import OAuth2PasswordRequestForm
+from datetime import datetime
 
 app = FastAPI()
 Base.metadata.create_all(engine)
@@ -72,5 +75,48 @@ def bulk_upload_employees(file: UploadFile = File(),
     return {"status": "uploaded"}
 
 
+@app.post('/login')
+def login(request: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(models.Employee).filter(models.Employee.email == request.username).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Invalid Credentials")
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail=f"Please update your password by going to this link localhost/update-password")
+    # if not Hash().verify(user.password, request.password):
+    #     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+    #                         detail=f"Incorrect password")
+    if not user.password == request.password:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Incorrect password")
+    role = "USER" if user.role_id == 1 else "ADMIN"
+    access_token = JWTtoken.create_access_token(data={"sub": user.email, "role": role})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.post('/update-password')
+def login(request: schemas.LoginUser, db: Session = Depends(get_db)):
+    user = db.query(models.Employee).filter(models.Employee.email == request.email)
+    db_user = user.first()
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Invalid Credentials")
+    if not db_user.is_active:
+        try:
+            employee = schemas.EmployeeUser(email=request.email, password=request.password)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        request_dict = request.dict()
+        request_dict["updated_at"] = datetime.utcnow()
+        request_dict["is_active"] = True
+        user.update(request_dict)
+        db.commit()
+        return {"status": "successfully updated password now you can login"}
+    else:
+        raise HTTPException(status_code=400, detail="Only First time login can change the password")
+
+
+
 if __name__ == '__main__':
-    uvicorn.run(app, host="localhost", port=8000)
+    uvicorn.run("main:app", host="localhost", port=8000, reload=True)
