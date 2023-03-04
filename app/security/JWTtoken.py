@@ -5,7 +5,7 @@ from app import schemas
 
 SECRET_KEY = "09d25e094faa6ca2556c89563b93f7099f6f0f4caa6cf63b8"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 15
+ACCESS_TOKEN_EXPIRE_MINUTES = 300
 
 
 def create_access_token(data: dict):
@@ -21,9 +21,10 @@ def verify_token(token: str, credentials_exception):
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         role: str = payload.get("role")
+        is_active = payload.get("is_active")
         if email is None:
             raise credentials_exception
-        token_data = schemas.TokenData(email=email, role=role)
+        token_data = schemas.TokenData(email=email, role=role, is_active=is_active)
         return token_data
     except JWTError:
         raise credentials_exception

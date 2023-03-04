@@ -77,3 +77,36 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: str
     role: str
+    is_active: bool
+
+
+class ShowEmployee(BaseModel):
+    first_name: str
+    last_name: Optional[str]
+    email: str
+    yrs_of_experience: int
+
+    class Config:
+        orm_mode = True
+
+
+class UpdateEmployee(BaseModel):
+    first_name: str
+    last_name: str
+
+
+class ResetPassword(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class PasswordValidate(BaseModel):
+    new_password: str
+
+    @validator("new_password")
+    def validate_last_name(cls, v):
+        if v is not None and len(v) < 8:
+            raise ValueError("Last name must be at least 3 characters long")
+        if v is not None and len(v) > 30:
+            raise ValueError("Last name must be at most 30 characters long")
+        return v

@@ -1,10 +1,13 @@
 import csv
+from typing import List
+
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 import schemas
 from security import JWTtoken
 from database import Base, engine, get_db
+from app.security import oauth2
 import models
 import uvicorn
 import codecs
@@ -77,7 +80,8 @@ def bulk_upload_employees(file: UploadFile = File(),
 
 @app.post('/login')
 def login(request: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(models.Employee).filter(models.Employee.email == request.username).first()
+    user_db = db.query(models.Employee).filter(models.Employee.email == request.username)
+    user = user_db.first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f"Invalid Credentials")
@@ -91,12 +95,15 @@ def login(request: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f"Incorrect password")
     role = "USER" if user.role_id == 1 else "ADMIN"
-    access_token = JWTtoken.create_access_token(data={"sub": user.email, "role": role})
+    access_token = JWTtoken.create_access_token(data={"sub": user.email, "role": role, "is_active": user.is_active})
+    # update last_login
+    user_db.update({"last_login": datetime.utcnow()})
+    db.commit()
     return {"access_token": access_token, "token_type": "bearer"}
 
 
 @app.post('/update-password')
-def login(request: schemas.LoginUser, db: Session = Depends(get_db)):
+def update_password(request: schemas.LoginUser, db: Session = Depends(get_db)):
     user = db.query(models.Employee).filter(models.Employee.email == request.email)
     db_user = user.first()
     if not db_user:
@@ -114,8 +121,104 @@ def login(request: schemas.LoginUser, db: Session = Depends(get_db)):
         db.commit()
         return {"status": "successfully updated password now you can login"}
     else:
-        raise HTTPException(status_code=400, detail="Only First time login can change the password")
+        raise HTTPException(status_code=400, detail="Only First time login can update the password")
 
+
+@app.get('/employees', response_model=List[schemas.ShowEmployee])
+async def all_employees(db: Session = Depends(get_db),
+                        current_user: schemas.TokenData = Depends(oauth2.get_current_user)):
+    await check_for_activation(current_user)
+    employees = db.query(models.Employee).all()
+    return employees
+
+
+@app.get('/employees/{email}', response_model=schemas.ShowEmployee)
+async def get_employee(email: str, db: Session = Depends(get_db),
+                       current_user: schemas.TokenData = Depends(oauth2.get_current_user)):
+    await check_for_activation(current_user)
+    employee = db.query(models.Employee).filter(models.Employee.email == email).first()
+    if not employee:
+        raise HTTPException(status_code=400,
+                            detail=f"Employee with this {email} could not be found")
+    return employee
+
+
+@app.post('/employees/{email}')
+async def update_employee(email: str, request: schemas.UpdateEmployee, db: Session = Depends(get_db),
+                          current_user: schemas.TokenData = Depends(oauth2.get_current_user)):
+    await check_for_activation(current_user)
+    if current_user.role == "ADMIN":
+        employee = db.query(models.Employee).filter(models.Employee.email == email)
+        if not employee.first():
+            raise HTTPException(status_code=400,
+                                detail=f"Employee with this {email} could not be found")
+        db_request = request.dict()
+        db_request["updated_at"] = datetime.utcnow()
+        db_request["updated_by"] = employee.first().id
+        employee.update(db_request)
+        db.commit()
+        return {"status": "employee updated successfully"}
+    else:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail=f"You dont have sufficient privileges")
+
+
+@app.delete('/employees/{email}')
+async def delete_employee(email: str, db: Session = Depends(get_db),
+                          current_user: schemas.TokenData = Depends(oauth2.get_current_user)):
+    await check_for_activation(current_user)
+    if current_user.role == "ADMIN":
+        employee = db.query(models.Employee).filter(models.Employee.email == email)
+        if not employee.first():
+            raise HTTPException(status_code=400,
+                                detail=f"Employee with this {email} could not be found")
+        employee.delete(synchronize_session=False)
+        db.commit()
+        return {"status": "employee deleted successfully"}
+    else:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail=f"You dont have sufficient privileges")
+
+
+@app.post('/reset-password')
+async def reset_password(request: schemas.ResetPassword, db: Session = Depends(get_db),
+                         current_user: schemas.TokenData = Depends(oauth2.get_current_user)):
+    await check_for_activation(current_user)
+    user = db.query(models.Employee).filter(models.Employee.email == current_user.email)
+    db_user = user.first()
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Invalid Credentials")
+    if not request.current_password == db_user.password:
+        raise HTTPException(status_code=400, detail="Your current password is incorrect")
+    try:
+        dummy = schemas.PasswordValidate(new_password=request.new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    user.update({"password": request.new_password})
+    db.commit()
+    return {"status": "password reset successful"}
+
+
+@app.post('/reset-password-admin/{email}')
+async def reset_password_admin(email: str, db: Session = Depends(get_db),
+                               current_user: schemas.TokenData = Depends(oauth2.get_current_user)):
+    await check_for_activation(current_user)
+    user = db.query(models.Employee).filter(models.Employee.email == email)
+    db_user = user.first()
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Invalid Credentials")
+    user.update({"password": "Test@12345"})
+    db.commit()
+    return {"status": f"password reset for {email} successful"}
+
+
+async def check_for_activation(current_user):
+    if not current_user.is_active:
+        raise HTTPException(status_code=400,
+                            detail="Please activate your account by updating your password through "
+                                   "/update-password url then you will have all functionality")
 
 
 if __name__ == '__main__':
