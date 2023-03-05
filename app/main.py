@@ -57,11 +57,10 @@ def bulk_upload_employees(file: UploadFile = File(),
             employees_ignored += 1
             continue
         db_employee = employee_data.dict()
-        db_employee["role_id"] = 1 if row["role"] == "USER" else 2
         db_employee["created_by"] = -1
         db_employee["updated_by"] = -1
         db_employee["password"] = hashing.Hash.bcrypt(DEFAULT_PASSWORD)
-        del db_employee["role"]
+        db_employee["role"] = db.query(models.Role).filter_by(name=row["role"]).first()
         try:
             db_employee = models.Employee(**db_employee)
             db.add(db_employee)
@@ -86,9 +85,8 @@ def login(request: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(
                             detail=f"Incorrect password")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                            detail=f"Please update your password by going to this link localhost/update-password")
-    role = "USER" if user.role_id == 1 else "ADMIN"
-    access_token = JWTtoken.create_access_token(data={"sub": user.email, "role": role, "is_active": user.is_active})
+                            detail=f"Please update your password by going to this link localhost/update-password-first-time")
+    access_token = JWTtoken.create_access_token(data={"sub": user.email, "role": user.role.name, "is_active": user.is_active})
     # update last_login
     user_db.update({"last_login": datetime.utcnow()})
     db.commit()

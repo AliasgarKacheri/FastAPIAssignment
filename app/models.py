@@ -22,6 +22,7 @@ class Employee(Base):
     password = Column(String)
     yrs_of_experience = Column(Integer, nullable=False)
     role_id = Column(Integer, ForeignKey('roles.id'))
+    role = relationship("Role")
     date_of_joining = Column(DateTime, nullable=False, default=datetime.utcnow)
     last_login = Column(DateTime, default=None)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
