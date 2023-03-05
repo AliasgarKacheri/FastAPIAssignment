@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 import schemas
 from security import JWTtoken
 from database import Base, engine, get_db
-from app.security import oauth2
+from app.security import oauth2, hashing
 import models
 import uvicorn
 import codecs
@@ -17,10 +17,7 @@ from datetime import datetime
 app = FastAPI()
 Base.metadata.create_all(engine)
 
-
-@app.get('/')
-async def root():
-    return {'message': 'Hello World!'}
+DEFAULT_PASSWORD = "Test@12345"
 
 
 @app.post("/bulk-upload-employees")
@@ -59,12 +56,11 @@ def bulk_upload_employees(file: UploadFile = File(),
         except ValueError as e:
             employees_ignored += 1
             continue
-        # created_by = Column(String(50))
-        # updated_by = Column(String(50))
         db_employee = employee_data.dict()
         db_employee["role_id"] = 1 if row["role"] == "USER" else 2
-        db_employee["created_by"] = 1
-        db_employee["updated_by"] = 1
+        db_employee["created_by"] = -1
+        db_employee["updated_by"] = -1
+        db_employee["password"] = hashing.Hash.bcrypt(DEFAULT_PASSWORD)
         del db_employee["role"]
         try:
             db_employee = models.Employee(**db_employee)
@@ -85,24 +81,21 @@ def login(request: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f"Invalid Credentials")
+    if not hashing.Hash.verify(user.password, request.password):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Incorrect password")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail=f"Please update your password by going to this link localhost/update-password")
-    # if not Hash().verify(user.password, request.password):
-    #     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-    #                         detail=f"Incorrect password")
-    if not user.password == request.password:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"Incorrect password")
     role = "USER" if user.role_id == 1 else "ADMIN"
     access_token = JWTtoken.create_access_token(data={"sub": user.email, "role": role, "is_active": user.is_active})
     # update last_login
     user_db.update({"last_login": datetime.utcnow()})
     db.commit()
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "Bearer"}
 
 
-@app.post('/update-password')
+@app.post('/update-password-first-time')
 def update_password(request: schemas.LoginUser, db: Session = Depends(get_db)):
     user = db.query(models.Employee).filter(models.Employee.email == request.email)
     db_user = user.first()
@@ -117,6 +110,7 @@ def update_password(request: schemas.LoginUser, db: Session = Depends(get_db)):
         request_dict = request.dict()
         request_dict["updated_at"] = datetime.utcnow()
         request_dict["is_active"] = True
+        request_dict["password"] = hashing.Hash.bcrypt(request_dict["password"])
         user.update(request_dict)
         db.commit()
         return {"status": "successfully updated password now you can login"}
@@ -135,6 +129,7 @@ async def all_employees(db: Session = Depends(get_db),
 @app.get('/employees/{email}', response_model=schemas.ShowEmployee)
 async def get_employee(email: str, db: Session = Depends(get_db),
                        current_user: schemas.TokenData = Depends(oauth2.get_current_user)):
+    email = email.lower()
     await check_for_activation(current_user)
     employee = db.query(models.Employee).filter(models.Employee.email == email).first()
     if not employee:
@@ -143,9 +138,10 @@ async def get_employee(email: str, db: Session = Depends(get_db),
     return employee
 
 
-@app.post('/employees/{email}')
+@app.put('/employees/{email}')
 async def update_employee(email: str, request: schemas.UpdateEmployee, db: Session = Depends(get_db),
                           current_user: schemas.TokenData = Depends(oauth2.get_current_user)):
+    email = email.lower()
     await check_for_activation(current_user)
     if current_user.role == "ADMIN":
         employee = db.query(models.Employee).filter(models.Employee.email == email)
@@ -167,6 +163,7 @@ async def update_employee(email: str, request: schemas.UpdateEmployee, db: Sessi
 async def delete_employee(email: str, db: Session = Depends(get_db),
                           current_user: schemas.TokenData = Depends(oauth2.get_current_user)):
     await check_for_activation(current_user)
+    email = email.lower()
     if current_user.role == "ADMIN":
         employee = db.query(models.Employee).filter(models.Employee.email == email)
         if not employee.first():
@@ -189,13 +186,13 @@ async def reset_password(request: schemas.ResetPassword, db: Session = Depends(g
     if not db_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f"Invalid Credentials")
-    if not request.current_password == db_user.password:
-        raise HTTPException(status_code=400, detail="Your current password is incorrect")
+    if not hashing.Hash.verify(db_user.password, request.current_password):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Incorrect password")
     try:
         dummy = schemas.PasswordValidate(new_password=request.new_password)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    user.update({"password": request.new_password})
+    user.update({"password": hashing.Hash.bcrypt(request.new_password)})
     db.commit()
     return {"status": "password reset successful"}
 
@@ -203,15 +200,20 @@ async def reset_password(request: schemas.ResetPassword, db: Session = Depends(g
 @app.post('/reset-password-admin/{email}')
 async def reset_password_admin(email: str, db: Session = Depends(get_db),
                                current_user: schemas.TokenData = Depends(oauth2.get_current_user)):
+    email = email.lower()
     await check_for_activation(current_user)
-    user = db.query(models.Employee).filter(models.Employee.email == email)
-    db_user = user.first()
-    if not db_user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
-                            detail=f"Invalid Credentials")
-    user.update({"password": "Test@12345"})
-    db.commit()
-    return {"status": f"password reset for {email} successful"}
+    if current_user.role == "ADMIN":
+        user = db.query(models.Employee).filter(models.Employee.email == email)
+        db_user = user.first()
+        if not db_user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                                detail=f"Invalid Credentials")
+        user.update({"password": hashing.Hash.bcrypt("Test@12345")})
+        db.commit()
+        return {"status": f"password reset for {email} successful"}
+    else:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail=f"You dont have sufficient privileges")
 
 
 async def check_for_activation(current_user):

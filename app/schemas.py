@@ -61,7 +61,7 @@ class EmployeeUser(LoginUser):
         return v.lower()
 
     @validator("password")
-    def validate_last_name(cls, v):
+    def validate_password(cls, v):
         if v is not None and len(v) < 8:
             raise ValueError("Last name must be at least 3 characters long")
         if v is not None and len(v) > 30:
