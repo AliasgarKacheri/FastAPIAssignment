@@ -78,6 +78,7 @@ class TokenData(BaseModel):
     email: str
     role: str
     is_active: bool
+    id: int
 
 
 class ShowEmployee(BaseModel):
