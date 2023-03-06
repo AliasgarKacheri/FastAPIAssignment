@@ -1,7 +1,8 @@
 import csv
-from typing import List
+from typing import Optional
 
 from fastapi import FastAPI, Depends, UploadFile, File, HTTPException, status
+from sqlalchemy import asc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 import schemas
@@ -86,7 +87,8 @@ def login(request: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail=f"Please update your password by going to this link localhost/update-password-first-time")
-    access_token = JWTtoken.create_access_token(data={"sub": user.email, "role": user.role.name, "is_active": user.is_active})
+    access_token = JWTtoken.create_access_token(
+        data={"sub": user.email, "role": user.role.name, "is_active": user.is_active})
     # update last_login
     user_db.update({"last_login": datetime.utcnow()})
     db.commit()
@@ -116,15 +118,48 @@ def update_password(request: schemas.LoginUser, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Only First time login can update the password")
 
 
-@app.get('/employees', response_model=List[schemas.ShowEmployee])
-async def all_employees(db: Session = Depends(get_db),
+@app.get('/employees')
+async def all_employees(first_name: Optional[str] = None, last_name: Optional[str] = None, email: Optional[str] = None,
+                        date_of_joining: Optional[str] = None, db: Session = Depends(get_db),
                         current_user: schemas.TokenData = Depends(oauth2.get_current_user)):
     await check_for_activation(current_user)
-    employees = db.query(models.Employee).all()
-    return employees
+    # Query the database for all employees
+    query = db.query(models.Employee)
+    if not first_name and last_name and email and date_of_joining:
+        raise HTTPException(status_code=400,
+                            detail="Please provide any one field")
+
+    # Apply filters if provided
+    if first_name:
+        query = query.filter(models.Employee.first_name.ilike(f'%{first_name}%'))
+    if last_name:
+        query = query.filter(models.Employee.last_name.ilike(f'%{last_name}%'))
+    if email:
+        query = query.filter(models.Employee.email.ilike(f'%{email}%'))
+    if date_of_joining:
+        # user_date = str(datetime.strptime(date_of_joining, '%Y-%m-%d').date())
+        # query = query.filter(models.Employee.date_of_joining == user_date)
+        user_date = datetime.strptime(date_of_joining, '%Y-%m-%d')
+        start_of_day = datetime(user_date.year, user_date.month, user_date.day, 0, 0, 0)
+        end_of_day = datetime(user_date.year, user_date.month, user_date.day, 23, 59, 59)
+        query = query.filter(models.Employee.date_of_joining >= start_of_day,
+                             models.Employee.date_of_joining <= end_of_day)
+
+    # Sort by email in ascending order
+    query = query.order_by(asc(models.Employee.email))
+    employees = query.all()
+    if not employees:
+        raise HTTPException(status_code=400,
+                            detail=f"Employees could not found with this parameters")
+
+    # admin can see all details and user only selected
+    if current_user.role == "ADMIN":
+        return employees
+    else:
+        return [schemas.ShowEmployee.from_orm(employee) for employee in employees]
 
 
-@app.get('/employees/{email}', response_model=schemas.ShowEmployee)
+@app.get('/employees/{email}')
 async def get_employee(email: str, db: Session = Depends(get_db),
                        current_user: schemas.TokenData = Depends(oauth2.get_current_user)):
     email = email.lower()
@@ -133,7 +168,11 @@ async def get_employee(email: str, db: Session = Depends(get_db),
     if not employee:
         raise HTTPException(status_code=400,
                             detail=f"Employee with this {email} could not be found")
-    return employee
+    # admin can see all details and user only selected
+    if current_user.role == "ADMIN":
+        return employee
+    else:
+        return schemas.ShowEmployee.from_orm(employee)
 
 
 @app.put('/employees/{email}')
@@ -218,7 +257,7 @@ async def check_for_activation(current_user):
     if not current_user.is_active:
         raise HTTPException(status_code=400,
                             detail="Please activate your account by updating your password through "
-                                   "/update-password url then you will have all functionality")
+                                   "/update-password-first-time url then you will have all functionality")
 
 
 if __name__ == '__main__':

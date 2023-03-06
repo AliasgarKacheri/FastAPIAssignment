@@ -84,7 +84,13 @@ class ShowEmployee(BaseModel):
     first_name: str
     last_name: Optional[str]
     email: str
-    yrs_of_experience: int
+    date_of_joining: str
+
+    @classmethod
+    def from_orm(cls, obj):
+        data = obj.__dict__
+        data['date_of_joining'] = data['date_of_joining'].isoformat()
+        return cls(**data)
 
     class Config:
         orm_mode = True
