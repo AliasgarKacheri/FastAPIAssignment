@@ -7,7 +7,7 @@ from app import schemas
 from app.security import hashing
 from app.database import models
 import codecs
-from app.utility import check_for_activation
+from app.utility import check_for_activation, check_date_is_iso
 from datetime import datetime
 from app.utility import DEFAULT_PASSWORD
 from app.logger import logger
@@ -65,7 +65,7 @@ def bulk_upload_employees(file: UploadFile, db: Session):
             employees_ignored += 1
             continue
         employees_added += 1
-    return {"status": f"uploaded: employees added{employees_added}, employee ignored{employees_ignored}"}
+    return {"status": f"uploaded: employees added {employees_added}, employee ignored {employees_ignored}"}
 
 
 async def all_employees(first_name, last_name, email, date_of_joining, db: Session,
@@ -83,13 +83,10 @@ async def all_employees(first_name, last_name, email, date_of_joining, db: Sessi
     if email:
         query = query.filter(models.Employee.email.ilike(f'%{email}%'))
     if date_of_joining:
-        # user_date = str(datetime.strptime(date_of_joining, '%Y-%m-%d').date())
-        # query = query.filter(models.Employee.date_of_joining == user_date)
-        user_date = datetime.strptime(date_of_joining, '%Y-%m-%d')
-        start_of_day = datetime(user_date.year, user_date.month, user_date.day, 0, 0, 0)
-        end_of_day = datetime(user_date.year, user_date.month, user_date.day, 23, 59, 59)
-        query = query.filter(models.Employee.date_of_joining >= start_of_day,
-                             models.Employee.date_of_joining <= end_of_day)
+        # validate date
+        check_date_is_iso(date_of_joining)
+        user_date = str(datetime.strptime(date_of_joining, '%Y-%m-%d').date())
+        query = query.filter(models.Employee.date_of_joining == user_date)
 
     # Sort by email in ascending order
     query = query.order_by(asc(models.Employee.email))

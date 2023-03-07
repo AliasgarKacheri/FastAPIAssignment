@@ -1,5 +1,5 @@
-from datetime import datetime
-from sqlalchemy import Column, DateTime, Integer, String, ForeignKey, Boolean
+from datetime import datetime, date
+from sqlalchemy import Column, DateTime, Integer, String, ForeignKey, Boolean, Date
 from sqlalchemy.orm import relationship
 
 from app.database.database import Base
@@ -23,7 +23,7 @@ class Employee(Base):
     yrs_of_experience = Column(Integer, nullable=False)
     role_id = Column(Integer, ForeignKey('roles.id'))
     role = relationship("Role")
-    date_of_joining = Column(DateTime, nullable=False, default=datetime.utcnow)
+    date_of_joining = Column(Date, nullable=False, default=date.today())
     last_login = Column(DateTime, default=None)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
