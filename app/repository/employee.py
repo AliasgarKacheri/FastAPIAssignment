@@ -96,7 +96,7 @@ async def all_employees(first_name, last_name, email, date_of_joining, db: Sessi
     employees = query.all()
     if not employees:
         logger.error("No employees found for given filters")
-        raise HTTPException(status_code=400,
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f"Employees could not found with this parameters")
 
     # admin can see all details and user only selected
@@ -113,7 +113,7 @@ async def get_employee(email: str, db: Session, current_user: schemas.TokenData)
     employee = db.query(models.Employee).filter(models.Employee.email == email).first()
     if not employee:
         logger.error(f"No employee found with given email {email}")
-        raise HTTPException(status_code=400,
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f"Employee with this {email} could not be found")
     # admin can see all details and user only selected
     if current_user.role == "ADMIN":
@@ -131,7 +131,7 @@ async def update_employee(email: str, request: schemas.UpdateEmployee, db: Sessi
         employee = db.query(models.Employee).filter(models.Employee.email == email)
         if not employee.first():
             logger.error(f"No employee found with given email {email}")
-            raise HTTPException(status_code=400,
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                                 detail=f"Employee with this {email} could not be found")
         db_request = request.dict()
         db_request["updated_at"] = datetime.utcnow()
@@ -142,7 +142,7 @@ async def update_employee(email: str, request: schemas.UpdateEmployee, db: Sessi
         return {"status": "employee updated successfully"}
     else:
         logger.error(f"insufficient privileges for user with email {current_user.email}")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail=f"You dont have sufficient privileges")
 
 
@@ -154,7 +154,7 @@ async def delete_employee(email: str, db: Session, current_user: schemas.TokenDa
         employee = db.query(models.Employee).filter(models.Employee.email == email)
         if not employee.first():
             logger.error(f"No employee found with given email {email}")
-            raise HTTPException(status_code=400,
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                                 detail=f"Employee with this {email} could not be found")
         employee.delete(synchronize_session=False)
         db.commit()
@@ -162,5 +162,5 @@ async def delete_employee(email: str, db: Session, current_user: schemas.TokenDa
         return {"status": "employee deleted successfully"}
     else:
         logger.error(f"insufficient privileges for user with email {current_user.email}")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail=f"You dont have sufficient privileges")

@@ -22,11 +22,11 @@ async def login(request: OAuth2PasswordRequestForm, db: Session):
                             detail=f"Invalid Credentials")
     if not hashing.Hash.verify(user.password, request.password):
         logger.error(f"incorrect password of user {user.email}")
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail=f"Incorrect password")
     if not user.is_active:
         logger.error(f'user is not active {user.email}')
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail=f"Please update your password by going to this "
                                    f"link localhost/update-password-first-time")
     access_token = JWTtoken.create_access_token(
@@ -61,7 +61,8 @@ async def update_password(request: schemas.LoginUser, db: Session):
         return {"status": "successfully updated password now you can login"}
     else:
         logger.error(f"user not active {db_user.email}")
-        raise HTTPException(status_code=400, detail="Only First time login can update the password")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Only First time login can update the password")
 
 
 async def reset_password(request: schemas.ResetPassword, db: Session,
@@ -104,5 +105,5 @@ async def reset_password_admin(email: str, db: Session,
         return {"status": f"password reset for {email} successful"}
     else:
         logger.error(f"insufficient privileges for user with email {current_user.email}")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail=f"You dont have sufficient privileges")

@@ -6,7 +6,7 @@ from app.logger import logger
 
 SECRET_KEY = "09d25e094faa6ca2556c89563b93f7099f6f0f4caa6cf63b8"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 300
+ACCESS_TOKEN_EXPIRE_MINUTES = 15
 
 
 def create_access_token(data: dict):
