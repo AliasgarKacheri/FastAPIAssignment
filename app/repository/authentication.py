@@ -82,7 +82,7 @@ async def reset_password(request: schemas.ResetPassword, db: Session,
         dummy = schemas.PasswordValidate(new_password=request.new_password)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    user.update({"password": hashing.Hash.bcrypt(request.new_password)})
+    user.update({"password": hashing.Hash.bcrypt(request.new_password), "updated_at": datetime.utcnow()})
     db.commit()
     logger.debug(f"successful reset password for user {db_user.email}")
     return {"status": "password reset successful"}
@@ -99,7 +99,9 @@ async def reset_password_admin(email: str, db: Session,
         if not db_user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                                 detail=f"Invalid Credentials")
-        user.update({"password": hashing.Hash.bcrypt(DEFAULT_PASSWORD), "is_active": False})
+        user.update(
+            {"password": hashing.Hash.bcrypt(DEFAULT_PASSWORD), "is_active": False, "updated_at": datetime.utcnow(),
+             "updated_by": current_user.id})
         db.commit()
         logger.debug(f"successfully reset password by admin for user {db_user.email}")
         return {"status": f"password reset for {email} successful"}
