@@ -7,7 +7,6 @@ from app.database.database import get_db
 from app.security import oauth2
 from app.repository import employee
 
-DEFAULT_PASSWORD = "Test@12345"
 
 router = APIRouter(prefix="/employees", tags=["Employees"])
 

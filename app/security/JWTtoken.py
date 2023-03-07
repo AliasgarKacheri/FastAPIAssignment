@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
-
 from app import schemas
+from app.logger import logger
+
 
 SECRET_KEY = "09d25e094faa6ca2556c89563b93f7099f6f0f4caa6cf63b8"
 ALGORITHM = "HS256"
@@ -28,4 +29,5 @@ def verify_token(token: str, credentials_exception):
         token_data = schemas.TokenData(email=email, role=role, is_active=is_active, id=id)
         return token_data
     except JWTError:
+        logger.error("something went wrong while verifying token")
         raise credentials_exception

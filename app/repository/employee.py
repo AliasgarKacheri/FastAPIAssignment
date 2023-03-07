@@ -9,25 +9,29 @@ from app.database import models
 import codecs
 from app.utility import check_for_activation
 from datetime import datetime
-
-DEFAULT_PASSWORD = "Test@12345"
+from app.utility import DEFAULT_PASSWORD
+from app.logger import logger
 
 
 def bulk_upload_employees(file: UploadFile, db: Session):
+    logger.debug("inside bulk_upload_employees method")
+
     # Check file name
     if file.filename != "bulk_upload_employees.csv":
+        logger.error(f"file name is incorrect {file.filename}")
         raise HTTPException(status_code=400, detail="Invalid file name")
 
     # Check file format
     file_format = file.filename.split(".")[-1]
     if file_format not in ["csv", "xls", 'vnd.ms-excel']:
+        logger.error(f"file format is incorrect {file.filename}")
         raise HTTPException(status_code=400, detail="Invalid file format")
 
     # Process CSV file
     try:
-        data = file.file
         csv_data = csv.DictReader(codecs.iterdecode(file.file, 'utf-8'))
     except Exception as e:
+        logger.error("invalid file content")
         raise HTTPException(status_code=400, detail=f"Invalid file content: {e}")
 
     employees_added = 0
@@ -37,11 +41,13 @@ def bulk_upload_employees(file: UploadFile, db: Session):
     if len(csv_data.fieldnames) == len(field_names):
         for field in csv_data.fieldnames:
             if field not in field_names:
+                logger.error("invalid file header")
                 raise HTTPException(status_code=400, detail=f"Invalid file header")
     for row in csv_data:
         try:
             employee_data = schemas.Employee(**row)
         except ValueError as e:
+            logger.error(f"Value error for employee {employee_data.dict()}")
             employees_ignored += 1
             continue
         db_employee = employee_data.dict()
@@ -54,15 +60,17 @@ def bulk_upload_employees(file: UploadFile, db: Session):
             db.add(db_employee)
             db.commit()
             db.refresh(db_employee)
+            logger.debug(f"successfully added employee with email {db_employee.email}")
         except IntegrityError as e:
             employees_ignored += 1
             continue
         employees_added += 1
-    return {"status": "uploaded"}
+    return {"status": f"uploaded: employees added{employees_added}, employee ignored{employees_ignored}"}
 
 
 async def all_employees(first_name, last_name, email, date_of_joining, db: Session,
                         current_user: schemas.TokenData):
+    logger.debug("inside all_employees method")
     await check_for_activation(current_user)
     # Query the database for all employees
     query = db.query(models.Employee)
@@ -87,6 +95,7 @@ async def all_employees(first_name, last_name, email, date_of_joining, db: Sessi
     query = query.order_by(asc(models.Employee.email))
     employees = query.all()
     if not employees:
+        logger.error("No employees found for given filters")
         raise HTTPException(status_code=400,
                             detail=f"Employees could not found with this parameters")
 
@@ -98,10 +107,12 @@ async def all_employees(first_name, last_name, email, date_of_joining, db: Sessi
 
 
 async def get_employee(email: str, db: Session, current_user: schemas.TokenData):
+    logger.debug("inside get_employee method")
     email = email.lower()
     await check_for_activation(current_user)
     employee = db.query(models.Employee).filter(models.Employee.email == email).first()
     if not employee:
+        logger.error(f"No employee found with given email {email}")
         raise HTTPException(status_code=400,
                             detail=f"Employee with this {email} could not be found")
     # admin can see all details and user only selected
@@ -113,11 +124,13 @@ async def get_employee(email: str, db: Session, current_user: schemas.TokenData)
 
 async def update_employee(email: str, request: schemas.UpdateEmployee, db: Session,
                           current_user: schemas.TokenData):
+    logger.debug("inside update_employee method")
     email = email.lower()
     await check_for_activation(current_user)
     if current_user.role == "ADMIN":
         employee = db.query(models.Employee).filter(models.Employee.email == email)
         if not employee.first():
+            logger.error(f"No employee found with given email {email}")
             raise HTTPException(status_code=400,
                                 detail=f"Employee with this {email} could not be found")
         db_request = request.dict()
@@ -125,23 +138,29 @@ async def update_employee(email: str, request: schemas.UpdateEmployee, db: Sessi
         db_request["updated_by"] = current_user.id
         employee.update(db_request)
         db.commit()
+        logger.debug(f"employee updated successfully with email {email}")
         return {"status": "employee updated successfully"}
     else:
+        logger.error(f"insufficient privileges for user with email {current_user.email}")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail=f"You dont have sufficient privileges")
 
 
 async def delete_employee(email: str, db: Session, current_user: schemas.TokenData):
+    logger.debug("inside delete_employee method")
     await check_for_activation(current_user)
     email = email.lower()
     if current_user.role == "ADMIN":
         employee = db.query(models.Employee).filter(models.Employee.email == email)
         if not employee.first():
+            logger.error(f"No employee found with given email {email}")
             raise HTTPException(status_code=400,
                                 detail=f"Employee with this {email} could not be found")
         employee.delete(synchronize_session=False)
         db.commit()
+        logger.debug(f"employee deleted successfully with email {email}")
         return {"status": "employee deleted successfully"}
     else:
+        logger.error(f"insufficient privileges for user with email {current_user.email}")
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                             detail=f"You dont have sufficient privileges")
