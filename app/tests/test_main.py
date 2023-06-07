@@ -1,7 +1,7 @@
 import json
 
 from fastapi.testclient import TestClient
-from app.main import app
+from main import app
 import pytest
 
 # Create a test client using the FastAPI instance
@@ -11,13 +11,13 @@ token = None
 
 @pytest.fixture(scope="module")
 def jwt_token():
-    return "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqYW5lLmRvZUBleGFtcGxlLmNvbSIsInJvbGUiOiJBRE1JTiIsImlzX2FjdGl2ZSI6dHJ1ZSwiaWQiOjEyLCJleHAiOjE2NzgyNTQwMDN9.W4BsaG6Ei4naCd_IuEQZLPAcEtF40bFWCHrAkdX1roo"
+    return "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJqYW5lLmRvZUBleGFtcGxlLmNvbSIsInJvbGUiOiJBRE1JTiIsImlzX2FjdGl2ZSI6dHJ1ZSwiaWQiOjQyLCJleHAiOjE2Nzg3MTAzNzR9.W7ng8FObqICTx3LBiv79pWgUxQHOIw6m7KjqyhfteSk"
 
 
 def test_incorrect_login():
     # Test with invalid credentials
     response = client.post("/auth/login", data={"username": "john.doe@example.com", "password": "wrong"})
-    assert response.status_code == 401
+    assert response.status_code == token
     assert response.json() == {"detail": "Incorrect password"}
 
 

@@ -2,11 +2,12 @@ from datetime import datetime, date
 from sqlalchemy import Column, DateTime, Integer, String, ForeignKey, Boolean, Date
 from sqlalchemy.orm import relationship
 
-from app.database.database import Base
+from database.database import Base
 
 
 class Role(Base):
     __tablename__ = "roles"
+    __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(50), unique=True, nullable=False)
@@ -14,6 +15,7 @@ class Role(Base):
 
 class Employee(Base):
     __tablename__ = 'employees'
+    __table_args__ = {'extend_existing': True}
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     first_name = Column(String(30), nullable=False)

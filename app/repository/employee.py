@@ -3,14 +3,14 @@ from fastapi import UploadFile, HTTPException, status
 from sqlalchemy import asc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from app import schemas
-from app.security import hashing
-from app.database import models
+import schemas
+from security import hashing
+from database import models
 import codecs
-from app.utility import check_for_activation, check_date_is_iso
+from utility import check_for_activation, check_date_is_iso
 from datetime import datetime
-from app.utility import DEFAULT_PASSWORD
-from app.logger import logger
+from utility import DEFAULT_PASSWORD
+from logger import logger
 
 
 def bulk_upload_employees(file: UploadFile, db: Session):
@@ -47,7 +47,7 @@ def bulk_upload_employees(file: UploadFile, db: Session):
         try:
             employee_data = schemas.Employee(**row)
         except ValueError as e:
-            logger.error(f"Value error for employee {employee_data.dict()}")
+            logger.error(f"Value error for employee {row['email']}, {str(e)}")
             employees_ignored += 1
             continue
         db_employee = employee_data.dict()
@@ -63,6 +63,7 @@ def bulk_upload_employees(file: UploadFile, db: Session):
             logger.debug(f"successfully added employee with email {db_employee.email}")
         except IntegrityError as e:
             employees_ignored += 1
+            db.rollback()
             continue
         employees_added += 1
     return {"status": f"uploaded: employees added {employees_added}, employee ignored {employees_ignored}"}

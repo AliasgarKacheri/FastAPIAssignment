@@ -1,5 +1,5 @@
 from fastapi import HTTPException, status
-from app.logger import logger
+from logger import logger
 from datetime import datetime
 
 DEFAULT_PASSWORD = "Test@12345"

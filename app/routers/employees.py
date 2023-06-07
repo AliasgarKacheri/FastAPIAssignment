@@ -2,10 +2,10 @@ from typing import Optional
 from fastapi import Depends, UploadFile, File, APIRouter, status
 
 from sqlalchemy.orm import Session
-from app import schemas
-from app.database.database import get_db
-from app.security import oauth2
-from app.repository import employee
+import schemas
+from database.database import get_db
+from security import oauth2
+from repository import employee
 
 
 router = APIRouter(prefix="/employees", tags=["Employees"])

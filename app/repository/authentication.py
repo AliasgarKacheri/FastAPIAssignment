@@ -1,15 +1,15 @@
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, Query
-from app import schemas
-from app.security import JWTtoken
-from app.security import hashing
-from app.database import models
+import schemas
+from security import JWTtoken
+from security import hashing
+from database import models
 
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import datetime
-from app.utility import check_for_activation
-from app.logger import logger
-from app.utility import DEFAULT_PASSWORD
+from utility import check_for_activation
+from logger import logger
+from utility import DEFAULT_PASSWORD
 
 
 async def login(request: OAuth2PasswordRequestForm, db: Session):
